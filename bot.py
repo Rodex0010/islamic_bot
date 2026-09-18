@@ -396,8 +396,9 @@ async def start_bot(client: Client, message: Message):
     
     if is_new_user:
         add_user(user_id, first_name, username)
-        past_time = datetime.now() - timedelta(minutes=60)
-        update_user_last_athkar_time(user_id, force_time=past_time)
+        # هنبعت له ذكر ترحيب دلوقتي، فعدّاد الأذكار الدورية يبدأ من دلوقتي
+        # (كان بيتحط -60 دقيقة، وده كان هيخلي الـ scheduler يبعت له ذكر تاني فوراً بعد الترحيب)
+        update_user_last_athkar_time(user_id, force_time=datetime.now())
         print(f"✅ New user added: {first_name} (@{username}) - ID: {user_id}")
     else:
         last_sent = get_user_last_athkar_time(user_id)
@@ -482,7 +483,9 @@ async def handle_activation(client: Client, message: Message):
         add_active_chat(chat_id)
         print(f"✅ Auto-activated chat: {chat_id}")
 
-@bot.on_message(filters.text & filters.group)
+# group=1: في Pyrogram أول handler بيطابق داخل نفس الـ group هو اللي بيتنفذ بس،
+# و handle_activation (فوق) بياخد كل رسالة نصية في الجروب، فالكويز عمره ما كان بيشتغل.
+@bot.on_message(filters.text & filters.group, group=1)
 async def quiz_keyword_handler(client: Client, message: Message):
     if not message.from_user or message.from_user.is_bot:
         return
@@ -492,7 +495,10 @@ async def quiz_keyword_handler(client: Client, message: Message):
     if text.strip() == "تفعيل":
         return
     
-    from handlers.quiz_handler import is_quiz_trigger, send_random_quiz
+    try:
+        from handlers.quiz_handler import is_quiz_trigger, send_random_quiz
+    except ImportError:
+        return
     
     if is_quiz_trigger(text):
         await send_random_quiz(client, message)
