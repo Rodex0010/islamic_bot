@@ -1,0 +1,25 @@
+{
+    "videos": [
+        {
+            "title": "الرقية الشرعية كاملة - يوتيوب",
+            "url": "https://youtu.be/b5ftmfOldE0?si=Kg4nDr4CS7RowdpB",
+            "type": "youtube"
+        }
+    ],
+    "reciters": [
+        {
+            "id": 1,
+            "name": "ماهر المعيقلي",
+            "style": "مرتل",
+            "file": "02-maher.mp3",
+            "title": "الرقية الشرعية - ماهر المعيقلي"
+        },
+        {
+            "id": 2,
+            "name": "ياسر الدوسري",
+            "style": "مجود",
+            "file": "Rqa_iiih6.mp3",
+            "title": "الرقية الشرعية - ياسر الدوسري"
+        }
+    ]
+}

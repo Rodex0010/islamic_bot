@@ -1,0 +1,32 @@
+[
+    {
+        "id": 1,
+        "name": "مشاري العفاسي",
+        "style": "مرتل",
+        "api_url": "https://server8.mp3quran.net/afs/{surah_id:03d}.mp3"
+    },
+    {
+        "id": 2,
+        "name": "فارس عباد",
+        "style": "مجود",
+        "api_url": "https://server8.mp3quran.net/frs_a/{surah_id:03d}.mp3"
+    },
+    {
+        "id": 3,
+        "name": "محمد البنا",
+        "style": "مرتل",
+        "api_url": "https://server8.mp3quran.net/bna/{surah_id:03d}.mp3"
+    },
+    {
+        "id": 4,
+        "name": "ماهر المعيقلي",
+        "style": "مجود",
+        "api_url": "https://server8.mp3quran.net/m_qari/{surah_id:03d}.mp3"
+    },
+    {
+        "id": 5,
+        "name": "أبو بكر الشاطري",
+        "style": "مجود",
+        "api_url": "https://server8.mp3quran.net/bu_khtr/{surah_id:03d}.mp3"
+    }
+]
