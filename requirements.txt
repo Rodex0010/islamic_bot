@@ -1,7 +1,7 @@
-aiogram==3.4.1
-aiohttp==3.9.3
-python-dotenv==1.0.0
-apscheduler==3.10.4
-redis==5.0.1
-tgcrypto==1.2.5
+aiohttp>=3.9.3
+python-dotenv>=1.0.0
+apscheduler>=3.10.4
+tgcrypto>=1.2.5
+beautifulsoup4>=4.12.3
+yt-dlp>=2025.1.1
 git+https://github.com/KurimuzonAkuma/kurigram.git
