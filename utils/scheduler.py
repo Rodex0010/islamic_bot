@@ -1,6 +1,8 @@
 # utils/scheduler.py
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
+from apscheduler.triggers.cron import CronTrigger
+from config import SIRA_DAILY_HOUR, SIRA_DAILY_MINUTE, SIRA_TIMEZONE
 from database import (
     get_all_active_chats,
     get_all_users,
@@ -168,6 +170,12 @@ async def group_dua_smart_job():
 async def group_quran_smart_job():
     await send_to_chats_with_smart_timing('quran')
 
+async def daily_sira_job():
+    """قصة اليوم من السيرة النبوية (مرة كل يوم)"""
+    from handlers.sira_handler import daily_sira_broadcast
+    if _bot_instance:
+        await daily_sira_broadcast(_bot_instance)
+
 def start_scheduler(bot):
     global _bot_instance
     _bot_instance = bot
@@ -212,8 +220,19 @@ def start_scheduler(bot):
             max_instances=3
         )
         
+        scheduler.add_job(
+            daily_sira_job,
+            trigger=CronTrigger(hour=SIRA_DAILY_HOUR, minute=SIRA_DAILY_MINUTE, timezone=SIRA_TIMEZONE),
+            id="daily_sira",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+            misfire_grace_time=6 * 3600
+        )
+
         scheduler.start()
         print("✅ Smart Scheduler started successfully!")
+        print(f"📌 قصة اليوم (السيرة) كل يوم الساعة {SIRA_DAILY_HOUR:02d}:{SIRA_DAILY_MINUTE:02d} ({SIRA_TIMEZONE})")
         print(f"📌 أذكار المستخدمين كل {INTERVALS['user_athkar']} دقيقة (موزعة)")
         print(f"📌 أذكار المجموعات كل {INTERVALS['group_athkar']} دقيقة (موزعة)")
         print(f"📌 أدعية المجموعات كل {INTERVALS['group_dua']} دقيقة (موزعة)")
