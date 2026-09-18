@@ -68,11 +68,19 @@ async def _fetch_html(url: str, retries: int = 3) -> Optional[str]:
             async with _sem:
                 async with session.get(url) as resp:
                     if resp.status == 200:
-                        return await resp.text()
+                        raw = await resp.read()
+                        # إسلام ويب أحياناً بيرجّع بايتات UTF-8 مقطوعة في نص الصفحة
+                        # (مثلاً مقتطفات بتتقص بالبايت). resp.text() كان بيرمي UnicodeDecodeError
+                        # وبيفشل الصفحة كلها؛ هنا بنستبدل البايت التالف بس ونكمّل.
+                        return raw.decode("utf-8", errors="replace")
                     log.warning("HTTP %s for %s", resp.status, url)
+                    # أخطاء الـ 4xx (غير 429) الإعادة مش هتفيد
+                    if 400 <= resp.status < 500 and resp.status != 429:
+                        return None
         except Exception as e:
-            log.warning("fetch error (%s) %s", e, url)
-        await asyncio.sleep(1.5 * (attempt + 1))
+            log.warning("fetch error (%r) %s", e, url)
+        if attempt < retries - 1:
+            await asyncio.sleep(1.5 * (attempt + 1))
     return None
 
 
@@ -99,7 +107,8 @@ def _write_json(path: str, data):
 
 # ------------------------------------------------------------------ listing
 def _clean(text: str) -> str:
-    return re.sub(r"\s+", " ", text or "").strip()
+    text = (text or "").replace("\ufffd", "")  # رمز الاستبدال الناتج عن بايتات تالفة
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def parse_listing(html: str) -> Tuple[List[Dict], int]:
@@ -225,6 +234,7 @@ def parse_article(html: str) -> Dict:
 
 
 def _normalize_text(text: str) -> str:
+    text = text.replace("\ufffd", "")  # رمز الاستبدال الناتج عن بايتات تالفة
     text = text.replace("\r", "")
     text = re.sub(r"[ \t\u00a0]+", " ", text)
     text = re.sub(r" *\n *", "\n", text)
@@ -236,6 +246,8 @@ async def get_article(article_id: int) -> Optional[Dict]:
     path = os.path.join(SIRA_CACHE_DIR, f"article_{article_id}.json")
     cached = _read_json(path)
     if cached and cached.get("text"):
+        if not cached.get("pages"):  # كاش قديم من غير صفحات
+            cached["pages"] = split_pages(cached["text"])
         return cached
 
     html = await _fetch_html(f"{ISLAMWEB_BASE}/ar/article/{article_id}/")
@@ -266,7 +278,7 @@ def split_pages(text: str, limit: int = SIRA_PAGE_CHARS) -> List[str]:
         while len(p) > limit:
             cut = max(p.rfind(sep, 0, limit) for sep in ("۔", ".", "،", "؟", "!", " "))
             if cut < limit // 2:
-                cut = limit
+                cut = limit - 1  # كان limit فبيطلع جزء أطول من الحد بحرف
             chunk, p = p[:cut + 1], p[cut + 1:].strip()
             if len(cur) + len(chunk) + 2 > limit:
                 flush()
@@ -290,18 +302,29 @@ async def build_daily_index(force: bool = False) -> List[Dict]:
             return cached
 
     result, seen = [], set()
+    complete = True  # لو أي صفحة فشلت مش هنحفظ الفهرس الناقص لأسبوع كامل
     for cat in DAILY_CATEGORIES:
         items, pages = await get_category_page(cat, 1)
+        if not items:
+            complete = False
         # الموقع بيرتب الأحدث أولاً؛ بنجمع أول 5 صفحات من كل قسم كحد أقصى
         for p in range(2, min(pages, 5) + 1):
             more, _ = await get_category_page(cat, p)
+            if not more:
+                complete = False
             items += more
             await asyncio.sleep(0.5)
         for it in items:
             if it["id"] not in seen:
                 seen.add(it["id"])
                 result.append(it)
-    if result:
+
+    if result and complete:
         _write_json(INDEX_PATH, result)
         return result
-    return _read_json(INDEX_PATH) or []
+
+    # فهرس ناقص: نفضّل آخر فهرس كامل محفوظ لو موجود، وإلا نستخدم الناقص من غير ما نحفظه
+    stale = _read_json(INDEX_PATH)
+    if stale and len(stale) >= len(result):
+        return stale
+    return result
