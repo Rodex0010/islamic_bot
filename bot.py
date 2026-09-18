@@ -15,7 +15,7 @@ from config import (
     CUSTOM_EMOJI_DEVELOPER, CUSTOM_EMOJI_BACK, TASBEEH_WORDS, CUSTOM_EMOJI_HELP,
     CUSTOM_EMOJI_M, CUSTOM_EMOJI_S, CUSTOM_EMOJI_X,
     CUSTOM_EMOJI_NEXT, CUSTOM_EMOJI_Bx, CUSTOM_EMOJI_T,
-    CUSTOM_EMOJI_u, CUSTOM_EMOJI_o, CUSTOM_EMOJI_qq
+    CUSTOM_EMOJI_u, CUSTOM_EMOJI_o, CUSTOM_EMOJI_qq, CUSTOM_EMOJI_PRAYER
 )
 from data.quran_api import SURAH_LIST, get_surah
 from database import (
@@ -26,6 +26,9 @@ from database import (
     fix_missing_last_sent_for_users, fix_missing_last_sent_for_chats
 )
 from handlers.ruqyah_handler import show_ruqyah_menu, play_ruqyah_audio
+from handlers.extras import handle_extra_callback, register_extra_handlers, open_from_start
+from handlers.broadcast_handler import is_admin, broadcast_button
+from utils.ui import btn
 from utils.scheduler import start_scheduler, set_bot_instance
 
 logging.basicConfig(level=logging.WARNING)
@@ -74,26 +77,38 @@ def init_new_columns():
     conn.commit()
     conn.close()
 
-MAIN_MENU = InlineKeyboardMarkup([
-    [
-        InlineKeyboardButton(" الأذكار", callback_data="menu_athkar", style=ButtonStyle.PRIMARY, icon_custom_emoji_id=CUSTOM_EMOJI_ATHKAR),
-        InlineKeyboardButton(" المصحف", callback_data="menu_quran", style=ButtonStyle.PRIMARY, icon_custom_emoji_id=CUSTOM_EMOJI_QURAN)
-    ],
-    [
-        InlineKeyboardButton(" التسبيح", callback_data="menu_tasbeeh", style=ButtonStyle.PRIMARY, icon_custom_emoji_id=CUSTOM_EMOJI_TASBEEH),
-        InlineKeyboardButton(" الأدعية", callback_data="menu_dua", style=ButtonStyle.PRIMARY, icon_custom_emoji_id=CUSTOM_EMOJI_DUA)
-    ],
-    [
-        InlineKeyboardButton(" الرقية", callback_data="menu_ruqyah", style=ButtonStyle.PRIMARY, icon_custom_emoji_id=CUSTOM_EMOJI_RUQYAH),
-        InlineKeyboardButton(" الشيوخ", callback_data="menu_reciters", style=ButtonStyle.PRIMARY, icon_custom_emoji_id=CUSTOM_EMOJI_RECITER)
-    ],
-    [
-        InlineKeyboardButton(" المطورون", callback_data="developer", style=ButtonStyle.SUCCESS, icon_custom_emoji_id=CUSTOM_EMOJI_DEVELOPER)
-    ],
-    [
-        InlineKeyboardButton(" ضفني", callback_data="how_to_add_channel", style=ButtonStyle.PRIMARY, icon_custom_emoji_id=CUSTOM_EMOJI_HELP)
+def get_main_menu(user_id=None):
+    rows = [
+        [
+            InlineKeyboardButton(" الأذكار", callback_data="menu_athkar", style=ButtonStyle.PRIMARY, icon_custom_emoji_id=CUSTOM_EMOJI_ATHKAR),
+            InlineKeyboardButton(" المصحف", callback_data="menu_quran", style=ButtonStyle.PRIMARY, icon_custom_emoji_id=CUSTOM_EMOJI_QURAN)
+        ],
+        [
+            InlineKeyboardButton(" التسبيح", callback_data="menu_tasbeeh", style=ButtonStyle.PRIMARY, icon_custom_emoji_id=CUSTOM_EMOJI_TASBEEH),
+            InlineKeyboardButton(" الأدعية", callback_data="menu_dua", style=ButtonStyle.PRIMARY, icon_custom_emoji_id=CUSTOM_EMOJI_DUA)
+        ],
+        [
+            InlineKeyboardButton(" الرقية", callback_data="menu_ruqyah", style=ButtonStyle.PRIMARY, icon_custom_emoji_id=CUSTOM_EMOJI_RUQYAH),
+            InlineKeyboardButton(" الشيوخ", callback_data="menu_reciters", style=ButtonStyle.PRIMARY, icon_custom_emoji_id=CUSTOM_EMOJI_RECITER)
+        ],
+        [
+            btn(" السيرة النبوية", "menu_sira", ButtonStyle.PRIMARY, CUSTOM_EMOJI_PRAYER),
+            btn(" خطب الشعراوي", "menu_sharawi", ButtonStyle.PRIMARY, CUSTOM_EMOJI_RECITER)
+        ],
+        [
+            btn(" إذاعة القرآن الكريم", "menu_radio", ButtonStyle.PRIMARY, CUSTOM_EMOJI_QURAN)
+        ],
+        [
+            InlineKeyboardButton(" المطورون", callback_data="developer", style=ButtonStyle.SUCCESS, icon_custom_emoji_id=CUSTOM_EMOJI_DEVELOPER)
+        ],
+        [
+            InlineKeyboardButton(" ضفني", callback_data="how_to_add_channel", style=ButtonStyle.PRIMARY, icon_custom_emoji_id=CUSTOM_EMOJI_HELP)
+        ],
     ]
-])
+    # زرار إذاعة الرسائل: بيظهر للأدمن بس
+    if user_id is not None and is_admin(user_id):
+        rows.append([broadcast_button()])
+    return InlineKeyboardMarkup(rows)
 
 def get_athkar_type_menu():
     return InlineKeyboardMarkup([
@@ -275,7 +290,10 @@ def get_suras_for_reciter(reciter_id, page=0):
     keyboard.append([InlineKeyboardButton(" الرئيسية", callback_data="back_main", style=ButtonStyle.SUCCESS, icon_custom_emoji_id=CUSTOM_EMOJI_BACK)])
     return InlineKeyboardMarkup(keyboard)
 
-async def send_welcome_message(client, chat_id, edit_mode=False, message=None, reply_markup=MAIN_MENU):
+async def send_welcome_message(client, chat_id, edit_mode=False, message=None, reply_markup=None, user_id=None):
+    if reply_markup is None:
+        reply_markup = get_main_menu(user_id)
+
     caption = f"""
     <blockquote expandable>
     <emoji id={CUSTOM_EMOJI_QURAN}>💚</emoji> <b>أهلاً بيك في البوت الإسلامي</b>
@@ -388,7 +406,15 @@ async def start_bot(client: Client, message: Message):
             update_user_last_athkar_time(user_id, force_time=past_time)
             print(f"✅ Fixed missing time for user: {user_id}")
     
-    await send_welcome_message(client, message.chat.id, edit_mode=False, message=message)
+    await send_welcome_message(client, message.chat.id, edit_mode=False, message=message, user_id=user_id)
+
+    # deep-link: /start sira_<id>
+    if len(message.command) > 1:
+        try:
+            if await open_from_start(client, message, message.command[1]):
+                return
+        except Exception as e:
+            print(f"deep-link error: {e}")
     
     if is_new_user:
         athkar = random.choice(SHORT_ATHKAR)
@@ -476,8 +502,12 @@ async def handle_callback(client: Client, query: CallbackQuery):
     data = query.data
     user_id = query.from_user.id
     
+    # الميزات الجديدة: السيرة / الشعراوي / الإذاعة / إذاعة الأدمن
+    if await handle_extra_callback(client, query):
+        return
+
     if data == "back_main":
-        await send_welcome_message(client, query.message.chat.id, edit_mode=True, message=query.message)
+        await send_welcome_message(client, query.message.chat.id, edit_mode=True, message=query.message, user_id=user_id)
         return
     
     if data == "developer":
@@ -853,9 +883,11 @@ if __name__ == "__main__":
     
     print("🚀 تشغيل البوت بكامل الميزات...")
     
+    register_extra_handlers(bot)
     set_bot_instance(bot)
     start_scheduler(bot)
     
+    print("🕌 السيرة النبوية شغالة - 🎙️ خطب الشعراوي شغالة - 📻 الإذاعة شغالة - 📢 إذاعة الأدمن شغالة")
     print("📖 المصحف شغال - 🎧 الشيوخ شغالين - 🕋 الرقية شغالة")
     print("📌 أمر /forceadd جاهز للإستخدام")
     print("✅ التفعيل التلقائي يعمل")
