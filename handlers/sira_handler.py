@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 from pyrogram.enums import ButtonStyle
 from pyrogram.errors import FloodWait
+from pyrogram.types import LinkPreviewOptions
 
 from config import (
     SIRA_TIMEZONE, CACHE_DIR, ISLAMWEB_BASE,
@@ -23,6 +24,9 @@ log = logging.getLogger("sira")
 
 STATE_PATH = os.path.join(CACHE_DIR, "sira", "daily_state.json")
 _state_lock = asyncio.Lock()
+
+# بديل disable_web_page_preview (اللي بقى deprecated في pyrogram)
+NO_PREVIEW = LinkPreviewOptions(is_disabled=True)
 
 
 # ------------------------------------------------------------------ menus
@@ -111,7 +115,7 @@ async def send_article_message(client, chat_id: int, aid: int):
     return await client.send_message(
         chat_id, reader_text(art, 0),
         reply_markup=reader_markup(aid, 0, len(art["pages"]), 0, 1),
-        disable_web_page_preview=True)
+        link_preview_options=NO_PREVIEW)
 
 
 # ------------------------------------------------------------------ daily story
@@ -128,9 +132,12 @@ def _load_state() -> dict:
 
 
 def _save_state(st: dict):
+    """بنكتب في ملف مؤقت وبعدين نبدّل، عشان لو البوت وقف في نص الكتابة الملف ميبوظش"""
     os.makedirs(os.path.dirname(STATE_PATH), exist_ok=True)
-    with open(STATE_PATH, "w", encoding="utf-8") as f:
+    tmp_path = STATE_PATH + ".tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(st, f, ensure_ascii=False)
+    os.replace(tmp_path, STATE_PATH)
 
 
 async def get_today_article_id():
@@ -165,14 +172,22 @@ async def daily_sira_broadcast(bot):
     if not aid:
         log.warning("daily sira: no article")
         return
-    st = _load_state()
-    if st.get("broadcast_done"):
-        return
+
+    async with _state_lock:
+        if _load_state().get("broadcast_done"):
+            return
+
     art = await get_article(aid)
     if not art:
         return
-    st["broadcast_done"] = True
-    _save_state(st)
+
+    # بنعلّم إن البث اتعمل قبل الإرسال عشان مفيش رسائل مكررة لو حصل خطأ في النص
+    async with _state_lock:
+        st = _load_state()
+        if st.get("broadcast_done"):
+            return
+        st["broadcast_done"] = True
+        _save_state(st)
 
     me = await bot.get_me()
     deep = f"https://t.me/{me.username}?start=sira_{aid}"
@@ -180,8 +195,13 @@ async def daily_sira_broadcast(bot):
     # المستخدمين: القصة كاملة بصفحات
     user_text = reader_text(art, 0)
     user_markup = reader_markup(aid, 0, len(art["pages"]), 0, 1)
+
     # الجروبات/القنوات: مقتطف + زرار يفتح القصة في البوت (عشان الصفحات متتغيرش للكل)
-    excerpt = art["pages"][0][:600].rsplit(" ", 1)[0] + " ..."
+    first_page = art["pages"][0]
+    if len(first_page) > 600:
+        excerpt = first_page[:600].rsplit(" ", 1)[0] + " ..."
+    else:
+        excerpt = first_page  # الصفحة قصيرة، مفيش داعي نقص آخر كلمة
     chat_text = (f"<b>🕌 قصة اليوم من السيرة النبوية</b>\n\n<b>📖 {esc(art['title'])}</b>\n\n"
                  f"<blockquote>{esc(excerpt)}</blockquote>")
     chat_markup = kb([[btn(" اقرأ القصة كاملة", url=deep, emoji=CUSTOM_EMOJI_QURAN)]])
@@ -189,11 +209,13 @@ async def daily_sira_broadcast(bot):
     async def _send(chat_id, text, markup):
         for _ in range(3):
             try:
-                await bot.send_message(chat_id, text, reply_markup=markup, disable_web_page_preview=True)
+                await bot.send_message(chat_id, text, reply_markup=markup,
+                                       link_preview_options=NO_PREVIEW)
                 return True
             except FloodWait as e:
                 await asyncio.sleep(e.value + 1)
-            except Exception:
+            except Exception as e:
+                log.warning("daily sira: send to %s failed: %s", chat_id, e)
                 return False
         return False
 
