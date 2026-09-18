@@ -58,3 +58,28 @@ PRAYER_REMINDER_MINUTES = 5
 
 # Quran
 VERSES_PER_PAGE = 10
+
+# الأدمن (الزر الخاص بالإذاعة بيظهر للأيديهات دي بس)
+ADMIN_IDS = [7876741744]
+ 
+# إذاعة القرآن الكريم (بث مباشر)
+RADIO_URL = "https://stream.radiojar.com/8s5u5tpdtwzuv"
+RADIO_NAME = "إذاعة القرآن الكريم - القاهرة"
+RADIO_CLIP_SECONDS = 60          # مدة المقطع المباشر اللي بيتسجل ويتبعت
+ 
+# السيرة النبوية (إسلام ويب)
+ISLAMWEB_BASE = "https://www.islamweb.net"
+SIRA_DAILY_HOUR = 9              # ساعة إرسال قصة اليوم (بتوقيت القاهرة)
+SIRA_DAILY_MINUTE = 0
+SIRA_TIMEZONE = "Africa/Cairo"
+SIRA_PAGE_CHARS = 3000           # عدد الحروف في الصفحة الواحدة
+ 
+# خطب الشيخ الشعراوي (يوتيوب)
+SHARAWI_CHANNEL_URL = "https://www.youtube.com/@alsharawiofficial/videos"
+SHARAWI_PER_PAGE = 8
+SHARAWI_MAX_PARALLEL = 2         # أقصى عدد تحميلات في نفس الوقت
+SHARAWI_MAX_HEIGHT = 480         # جودة الفيديو (480 = حجم معقول)
+SHARAWI_MAX_FILESIZE = 1_900_000_000   # ~1.9GB حد تيليجرام
+YT_COOKIES_FILE = os.getenv("YT_COOKIES_FILE", "cookies.txt")  # اختياري لو يوتيوب رفض التحميل من السيرفر
+DOWNLOAD_DIR = "downloads"
+CACHE_DIR = "cache"
